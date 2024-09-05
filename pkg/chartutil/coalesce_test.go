@@ -92,6 +92,9 @@ func TestCoalesceValues(t *testing.T) {
 				"global": map[string]interface{}{
 					"nested2": map[string]interface{}{"l1": "pequod"},
 				},
+				"ahab": map[string]interface{}{
+					"nested": map[string]interface{}{"bar": true},
+				},
 			},
 		},
 			&chart.Chart{
