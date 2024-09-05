@@ -238,7 +238,7 @@ func coalesceValues(printf printFn, c *chart.Chart, v map[string]interface{}, pr
 					}
 				} else {
 					// If the key is a child chart, coalesce tables with Merge set to true
-					merge := childChartMergeTrue(c, key, merge)
+					merge := childChartorGlobalMergeTrue(c, key, merge)
 
 					// Because v has higher precedence than nv, dest values override src
 					// values.
@@ -252,7 +252,11 @@ func coalesceValues(printf printFn, c *chart.Chart, v map[string]interface{}, pr
 	}
 }
 
-func childChartMergeTrue(chrt *chart.Chart, key string, merge bool) bool {
+func childChartorGlobalMergeTrue(chrt *chart.Chart, key string, merge bool) bool {
+	if key == GlobalKey {
+		return true
+	}
+
 	for _, subchart := range chrt.Dependencies() {
 		if subchart.Name() == key {
 			return true
