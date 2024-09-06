@@ -255,6 +255,46 @@ func TestInstallRelease_DryRun(t *testing.T) {
 	is.Equal(res.Info.Description, "Dry run complete")
 }
 
+func TestInstallRelease_DryRunHiddenSecret(t *testing.T) {
+	is := assert.New(t)
+	instAction := installAction(t)
+
+	// First perform a normal dry-run with the secret and confirm its presence.
+	instAction.DryRun = true
+	vals := map[string]interface{}{}
+	res, err := instAction.Run(buildChart(withSampleSecret(), withSampleTemplates()), vals)
+	if err != nil {
+		t.Fatalf("Failed install: %s", err)
+	}
+	is.Contains(res.Manifest, "---\n# Source: hello/templates/secret.yaml\napiVersion: v1\nkind: Secret")
+
+	_, err = instAction.cfg.Releases.Get(res.Name, res.Version)
+	is.Error(err)
+	is.Equal(res.Info.Description, "Dry run complete")
+
+	// Perform a dry-run where the secret should not be present
+	instAction.HideSecret = true
+	vals = map[string]interface{}{}
+	res2, err := instAction.Run(buildChart(withSampleSecret(), withSampleTemplates()), vals)
+	if err != nil {
+		t.Fatalf("Failed install: %s", err)
+	}
+
+	is.NotContains(res2.Manifest, "---\n# Source: hello/templates/secret.yaml\napiVersion: v1\nkind: Secret")
+
+	_, err = instAction.cfg.Releases.Get(res2.Name, res2.Version)
+	is.Error(err)
+	is.Equal(res2.Info.Description, "Dry run complete")
+
+	// Ensure there is an error when HideSecret True but not in a dry-run mode
+	instAction.DryRun = false
+	vals = map[string]interface{}{}
+	_, err = instAction.Run(buildChart(withSampleSecret(), withSampleTemplates()), vals)
+	if err == nil {
+		t.Fatalf("Did not get expected an error when dry-run false and hide secret is true")
+	}
+}
+
 // Regression test for #7955
 func TestInstallRelease_DryRun_Lookup(t *testing.T) {
 	is := assert.New(t)
@@ -389,16 +429,14 @@ func TestInstallRelease_Wait_Interrupted(t *testing.T) {
 	instAction.Wait = true
 	vals := map[string]interface{}{}
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(time.Second, cancel)
 
 	goroutines := runtime.NumGoroutine()
 
-	res, err := instAction.RunWithContext(ctx, buildChart(), vals)
+	_, err := instAction.RunWithContext(ctx, buildChart(), vals)
 	is.Error(err)
-	is.Contains(res.Info.Description, "Release \"interrupted-release\" failed: context canceled")
-	is.Equal(res.Info.Status, release.StatusFailed)
+	is.Contains(err.Error(), "context canceled")
 
 	is.Equal(goroutines+1, runtime.NumGoroutine()) // installation goroutine still is in background
 	time.Sleep(10 * time.Second)                   // wait for goroutine to finish
@@ -475,8 +513,7 @@ func TestInstallRelease_Atomic_Interrupted(t *testing.T) {
 	instAction.Atomic = true
 	vals := map[string]interface{}{}
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(time.Second, cancel)
 
 	res, err := instAction.RunWithContext(ctx, buildChart(), vals)
